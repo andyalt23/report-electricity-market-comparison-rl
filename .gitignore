@@ -37,7 +37,6 @@ output/
 2_market_simulation/data/
 2_market_simulation/output/
 2_market_simulation/_F-code/
-2_market_simulation/src/MGPDecoupled/
 
 # Files by type
 **/*.jld2
