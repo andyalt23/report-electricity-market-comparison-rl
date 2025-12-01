@@ -1,3 +1,5 @@
+# Autore: Andrea Altamura | Politecnico di Bari
+
 function save_simulation_data(sim_results, dir_output)
     file_name = "$(sim_results[:sim_name]).jdl2"
     

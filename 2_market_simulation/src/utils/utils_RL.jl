@@ -1,4 +1,5 @@
 # =======================================================
+# Autore: Andrea Altamura | Politecnico di Bari
 # Utils per la parte di Reinforcement Learning
 # =======================================================
 

@@ -1,4 +1,5 @@
 # =======================================================
+# Autore: Andrea Altamura | Politecnico di Bari
 # Utils per la stampa dei risultati delle simulazioni
 # Contiene funzioni per stampare statistiche e risultati
 # =======================================================

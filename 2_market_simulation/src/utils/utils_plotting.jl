@@ -1,4 +1,5 @@
 # =======================================================
+# Autore: Andrea Altamura | Politecnico di Bari
 # Utils per la visualizzazione dei risultati
 # Contiene funzioni per generare grafici delle simulazioni
 # =======================================================

@@ -1,4 +1,5 @@
 # =======================================================
+# Autore: Andrea Altamura | Politecnico di Bari
 # Utils per la conversione dei dati
 # Contiene funzioni per adattare dati agli script esistenti
 # =======================================================

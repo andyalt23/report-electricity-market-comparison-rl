@@ -1,8 +1,6 @@
 # =======================================================
-# Autore: Andrea Altamura
+# Autore: Andrea Altamura | Politecnico di Bari
 # Script principale per simulazioni di mercato elettrico
-# Tesi Magistrale LM - Politecnico di Bari
-# Anno accademico 2024/2025
 # =======================================================
 
 print("\n", "="^15)

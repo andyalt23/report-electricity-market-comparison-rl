@@ -1,4 +1,5 @@
 # =======================================================
+# Autore: Andrea Altamura | Politecnico di Bari
 # Utils principali per simulazioni di mercato elettrico
 # Contiene funzioni per strutture dati, offerte, e simulazioni
 # =======================================================
