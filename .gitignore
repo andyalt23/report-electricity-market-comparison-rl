@@ -32,11 +32,9 @@ output/
 
 # Project-specific data & outputs
 1_categorize_up/data/
-1_categorize_up/data/
 1_categorize_up/output/
 2_market_simulation/data/
 2_market_simulation/output/
-2_market_simulation/_F-code/
 
 # Files by type
 **/*.jld2
