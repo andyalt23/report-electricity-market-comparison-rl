@@ -51,41 +51,13 @@ println("\n", "="^15)
 
     # Dataset da utilizzare
         # Caricare un dataset esistente
-        # up_dataset = get_up_dataset(
-        #     dir_data    =   dir_data,
-        #     mode        =   2,
-        #     # file_name   =   "up_dataset_for_market_simulations.csv",
-        #     file_name   =   "up_dataset_PNIEC_2op.jdl2",
-        #     mute        =   true
-        #     )
-
-        # Dataset di Fabrizio
-            up_dataset = CSV.read(dir_data*"/Offers30.dat", DataFrame)
-            for c in names(up_dataset)
-                t = eltype(up_dataset[!, c])
-                if t != String && (t <: AbstractString || occursin("String", string(t)) || occursin("CategoricalValue{String", string(t)))
-                    try
-                        up_dataset[!, c] = [ismissing(x) ? missing : String(x) for x in up_dataset[!, c]]
-                    catch e
-                        @warn "Conversione colonna $c fallita: $e"
-                    end
-                end
-            end
-            rename!(up_dataset, "Operatore" => "OP")
-            rename!(up_dataset, :Q => "Capacity_MW")
-            rename!(up_dataset, "Type " => "Type")
-            rename!(up_dataset, "UP  " => "UP")
-            rename!(up_dataset, "Mcost" => "MCost")
-            up_dataset[!, "Cluster"] = Vector{Union{String, Missing}}(missing, nrow(up_dataset))
-            for elem in eachrow(up_dataset)
-                if elem.Type == "FCMT" && elem.SubType == "NP"
-                    elem.Cluster = "PV/WIND"
-                elseif elem.Type == "FCMT" && elem.SubType == "P"
-                    elem.Cluster = "HYDRO"
-                elseif elem.Type == "FCMNT"
-                    elem.Cluster = "GAS"
-                end
-            end
+        up_dataset = get_up_dataset(
+            dir_data    =   dir_data,
+            mode        =   1,
+            file_name   =   "up_dataset_for_market_simulations.csv",
+            # file_name   =   "up_dataset_PNIEC_2op.jdl2",
+            mute        =   true
+            )
 
         # Stampa le statistiche del dataset caricato
         print_up_dataset_stats(up_dataset)
@@ -106,7 +78,7 @@ println("\n", "="^15)
 # Impostazioni simulazioni
 # =======================================================
     # Domanda mercato elettrico [MW]
-    D = 5_000.0 #15_000.0 #1_000.0 
+    D = 15_000.0 #1_000.0 
 
     # Parametri peer simulazione con markup fissi
         # Markup fissi da applicare
@@ -125,8 +97,8 @@ println("\n", "="^15)
         # NOTA: per beneficiare del multi threading bisogna impostare julia.NumThreads in VSCode al numero di core FISICI desiderati
 
         # Parametri Q-table
-        skip_test_training      = false  # Saltare il training di test singolo stato
-        skip_training           = false   # Saltare il training completo e caricare le Q table sotto indicate
+        skip_test_training      = true  # Saltare il training di test singolo stato
+        skip_training           = true   # Saltare il training completo e caricare le Q table sotto indicate
             Q_table_name_PaB        = "Q_table_PaB_it2000.jld2"  
             Q_table_name_PaC        = "Q_table_PaC_it2000.jld2"
             Q_table_name_SPaC       = "Q_table_SPaC_it2000.jld2"
@@ -146,7 +118,7 @@ println("\n", "="^15)
         # Hypertraining parameters
         ε_MAX           = 1.0
         ε_MIN           = 0.05
-        num_episodi     = 4_000 #2_000
+        num_episodi     = 2_000
         decay_rate      = calculate_decay_rate(ε_MAX, ε_MIN, num_episodi)
 
     # Debugging e visualizzazione
@@ -511,10 +483,13 @@ println("\n", "="^15)
     println("\n", "="^60)
 
     # Carica la curva della domanda di Terna
-        d_x = JLD2.load(joinpath(dir_data, "spline_curva_domanda_Terna.jld2"), "spl")  
+        # d_x = JLD2.load(joinpath(dir_data, "spline_curva_domanda_Terna.jld2"), "spl")  
+        d_x = JLD2.load(joinpath(dir_data, "spline-curva-carico-anno2024.jld2"), "spl")  
+
 
         # Riscala la curva tra D_MIN e D_MAX
-        x = 1:96 # intervalli di 15 minuti in un giorno
+        # x = 1:96 # intervalli di 15 minuti in un giorno
+        x = 1:(4*24*366) # intervalli di 15 minuti in un anno bisestile (2024)
         y = [d_x(s) for s in x]
         yₛ = rescale_demand(y, D_MIN, D_MAX)
 
@@ -544,6 +519,8 @@ println("\n", "="^15)
         profitto_tot = Float64[],
         )
 
+        pbar = Progress(length(yₛ), showspeed=true)
+
         for demand in yₛ
             # Presenta le offerte di mercato degli operatori
             local offerte = presenta_offerte_mercato(operatori)
@@ -571,7 +548,12 @@ println("\n", "="^15)
                     ))
                 end
             end
+
+            next!(pbar)
+
         end
+
+        finish!(pbar)
 
         # Calcolo e stampa tabella riepilogativa per ogni mercato
         # Inizializza DataFrame riepilogativo
@@ -645,6 +627,8 @@ println("\n", "="^15)
         profitto_tot = Float64[],
         )
 
+        pbar = Progress(length(yₛ), showspeed=true)
+
         for demand in  yₛ
             # Calcola i markup ottimali per ogni operatore in base alla domanda
             
@@ -711,7 +695,12 @@ println("\n", "="^15)
                     ))
                 end
             end
+
+            next!(pbar)
+
         end
+
+        finish!(pbar)
 
         # Calcolo e stampa tabella riepilogativa per ogni mercato
         # Inizializza DataFrame riepilogativo
@@ -799,55 +788,60 @@ println("\n", "="^15)
         end    
 
     # Tabella finale comparativa per alcuni livelli di domanda (range 50% circa fino a 100%)
-        x = 22:2:44
-        y₁ = yₛ[collect(x)]
 
-        labels = [
-            "Market Capacity", "D", "D/Market Capacity [%]",
-            "Costo tot PaB [€] (Marg)", "Costo tot PaC [€] (Marg)", "Costo tot SPaC [€] (Marg)",
-            "Profitto operatori PaB [€] (Marg)", "Profitto operatori PaC [€] (Marg)", "Profitto operatori SPaC [€] (Marg)",
-            "PUN PaB [€/MWh] (Marg)", "PUN PaC [€/MWh] (Marg)", "PUN SPaC [€/MWh] (Marg)",
-            "Costo tot PaB [€] (RL)", "Costo tot PaC [€] (RL)", "Costo tot SPaC [€] (RL)",
-            "Profitto operatori PaB [€] (RL)", "Profitto operatori PaC [€] (RL)", "Profitto operatori SPaC [€] (RL)",
-            "PUN PaB [€/MWh] (RL)", "PUN PaC [€/MWh] (RL)", "PUN SPaC [€/MWh] (RL)"
-        ]
+        try
+            x = 22:2:44
+            y₁ = yₛ[collect(x)]
 
-        tabella = DataFrame()
-        tabella.label = labels
+            labels = [
+                "Market Capacity", "D", "D/Market Capacity [%]",
+                "Costo tot PaB [€] (Marg)", "Costo tot PaC [€] (Marg)", "Costo tot SPaC [€] (Marg)",
+                "Profitto operatori PaB [€] (Marg)", "Profitto operatori PaC [€] (Marg)", "Profitto operatori SPaC [€] (Marg)",
+                "PUN PaB [€/MWh] (Marg)", "PUN PaC [€/MWh] (Marg)", "PUN SPaC [€/MWh] (Marg)",
+                "Costo tot PaB [€] (RL)", "Costo tot PaC [€] (RL)", "Costo tot SPaC [€] (RL)",
+                "Profitto operatori PaB [€] (RL)", "Profitto operatori PaC [€] (RL)", "Profitto operatori SPaC [€] (RL)",
+                "PUN PaB [€/MWh] (RL)", "PUN PaC [€/MWh] (RL)", "PUN SPaC [€/MWh] (RL)"
+            ]
 
-        for (i, D) in enumerate(y₁)
-            valori = zeros(length(labels))
+            tabella = DataFrame()
+            tabella.label = labels
 
-            valori[1] = Market_capacity
-            valori[2] = D
-            valori[3] = D / Market_capacity * 100
-            valori[4] = sum(costi_mercati_MC.costo_tot[(costi_mercati_MC.mercato .== "PaB") .& (costi_mercati_MC.domanda .== D)])
-            valori[5] = sum(costi_mercati_MC.costo_tot[(costi_mercati_MC.mercato .== "PaC") .& (costi_mercati_MC.domanda .== D)])
-            valori[6] = sum(costi_mercati_MC.costo_tot[(costi_mercati_MC.mercato .== "SPaC") .& (costi_mercati_MC.domanda .== D)])
-            valori[7] = sum(profitti_operatori_MC.profitto_tot[(profitti_operatori_MC.mercato .== "PaB") .& (profitti_operatori_MC.domanda .== D)])
-            valori[8] = sum(profitti_operatori_MC.profitto_tot[(profitti_operatori_MC.mercato .== "PaC") .& (profitti_operatori_MC.domanda .== D)])
-            valori[9] = sum(profitti_operatori_MC.profitto_tot[(profitti_operatori_MC.mercato .== "SPaC") .& (profitti_operatori_MC.domanda .== D)])
-            valori[10] = only(costi_mercati_MC.PUN[(costi_mercati_MC.mercato .== "PaB") .& (costi_mercati_MC.domanda .== D)])
-            valori[11] = only(costi_mercati_MC.PUN[(costi_mercati_MC.mercato .== "PaC") .& (costi_mercati_MC.domanda .== D)])
-            valori[12] = only(costi_mercati_MC.PUN[(costi_mercati_MC.mercato .== "SPaC") .& (costi_mercati_MC.domanda .== D)])
-            valori[13] = sum(costi_mercati_RL.costo_tot[(costi_mercati_RL.mercato .== "PaB") .& (costi_mercati_RL.domanda .== D)])
-            valori[14] = sum(costi_mercati_RL.costo_tot[(costi_mercati_RL.mercato .== "PaC") .& (costi_mercati_RL.domanda .== D)])
-            valori[15] = sum(costi_mercati_RL.costo_tot[(costi_mercati_RL.mercato .== "SPaC") .& (costi_mercati_RL.domanda .== D)])
-            valori[16] = sum(profitti_operatori_RL.profitto_tot[(profitti_operatori_RL.mercato .== "PaB") .& (profitti_operatori_RL.domanda .== D)])
-            valori[17] = sum(profitti_operatori_RL.profitto_tot[(profitti_operatori_RL.mercato .== "PaC") .& (profitti_operatori_RL.domanda .== D)])
-            valori[18] = sum(profitti_operatori_RL.profitto_tot[(profitti_operatori_RL.mercato .== "SPaC") .& (profitti_operatori_RL.domanda .== D)])
-            valori[19] = only(costi_mercati_RL.PUN[(costi_mercati_RL.mercato .== "PaB") .& (costi_mercati_RL.domanda .== D)])
-            valori[20] = only(costi_mercati_RL.PUN[(costi_mercati_RL.mercato .== "PaC") .& (costi_mercati_RL.domanda .== D)])
-            valori[21] = only(costi_mercati_RL.PUN[(costi_mercati_RL.mercato .== "SPaC") .& (costi_mercati_RL.domanda .== D)])
+            for (i, D) in enumerate(y₁)
+                valori = zeros(length(labels))
 
-            tabella[!, string(i)] = valori 
-        end
+                valori[1] = Market_capacity
+                valori[2] = D
+                valori[3] = D / Market_capacity * 100
+                valori[4] = sum(costi_mercati_MC.costo_tot[(costi_mercati_MC.mercato .== "PaB") .& (costi_mercati_MC.domanda .== D)])
+                valori[5] = sum(costi_mercati_MC.costo_tot[(costi_mercati_MC.mercato .== "PaC") .& (costi_mercati_MC.domanda .== D)])
+                valori[6] = sum(costi_mercati_MC.costo_tot[(costi_mercati_MC.mercato .== "SPaC") .& (costi_mercati_MC.domanda .== D)])
+                valori[7] = sum(profitti_operatori_MC.profitto_tot[(profitti_operatori_MC.mercato .== "PaB") .& (profitti_operatori_MC.domanda .== D)])
+                valori[8] = sum(profitti_operatori_MC.profitto_tot[(profitti_operatori_MC.mercato .== "PaC") .& (profitti_operatori_MC.domanda .== D)])
+                valori[9] = sum(profitti_operatori_MC.profitto_tot[(profitti_operatori_MC.mercato .== "SPaC") .& (profitti_operatori_MC.domanda .== D)])
+                valori[10] = only(costi_mercati_MC.PUN[(costi_mercati_MC.mercato .== "PaB") .& (costi_mercati_MC.domanda .== D)])
+                valori[11] = only(costi_mercati_MC.PUN[(costi_mercati_MC.mercato .== "PaC") .& (costi_mercati_MC.domanda .== D)])
+                valori[12] = only(costi_mercati_MC.PUN[(costi_mercati_MC.mercato .== "SPaC") .& (costi_mercati_MC.domanda .== D)])
+                valori[13] = sum(costi_mercati_RL.costo_tot[(costi_mercati_RL.mercato .== "PaB") .& (costi_mercati_RL.domanda .== D)])
+                valori[14] = sum(costi_mercati_RL.costo_tot[(costi_mercati_RL.mercato .== "PaC") .& (costi_mercati_RL.domanda .== D)])
+                valori[15] = sum(costi_mercati_RL.costo_tot[(costi_mercati_RL.mercato .== "SPaC") .& (costi_mercati_RL.domanda .== D)])
+                valori[16] = sum(profitti_operatori_RL.profitto_tot[(profitti_operatori_RL.mercato .== "PaB") .& (profitti_operatori_RL.domanda .== D)])
+                valori[17] = sum(profitti_operatori_RL.profitto_tot[(profitti_operatori_RL.mercato .== "PaC") .& (profitti_operatori_RL.domanda .== D)])
+                valori[18] = sum(profitti_operatori_RL.profitto_tot[(profitti_operatori_RL.mercato .== "SPaC") .& (profitti_operatori_RL.domanda .== D)])
+                valori[19] = only(costi_mercati_RL.PUN[(costi_mercati_RL.mercato .== "PaB") .& (costi_mercati_RL.domanda .== D)])
+                valori[20] = only(costi_mercati_RL.PUN[(costi_mercati_RL.mercato .== "PaC") .& (costi_mercati_RL.domanda .== D)])
+                valori[21] = only(costi_mercati_RL.PUN[(costi_mercati_RL.mercato .== "SPaC") .& (costi_mercati_RL.domanda .== D)])
 
-        pretty_table(tabella)
+                tabella[!, string(i)] = valori 
+            end
 
-        if save_data_flag
-            CSV.write(joinpath(dir_output, "tabella_comparativa_finale.csv"), tabella)
-            @info "💾 Dati salvati: tabella_comparativa_finale.csv"
+            pretty_table(tabella)
+
+            if save_data_flag
+                CSV.write(joinpath(dir_output, "tabella_comparativa_finale.csv"), tabella)
+                @info "💾 Dati salvati: tabella_comparativa_finale.csv"
+            end
+        catch e
+            @error "Errore durante la creazione della tabella comparativa finale: $e"
         end
 
 # =======================================================
