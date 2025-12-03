@@ -109,7 +109,7 @@ println("\n", "="^15)
         D_MIN           = 0.25 * Market_capacity
         state_space     = range(D_MIN, D_MAX; length=100)
 
-        # Action space (markup)
+        # Action space (markup) 
         markup_space     = collect([0.0, 5.0, 10.0, 20.0]) 
         markup_space_PaB = collect([0.0, 50.0, 100.0, 200.0])  # Markup più ampi per PaB
         action_space, legenda_azioni = create_action_space(operatori, markup_space)
